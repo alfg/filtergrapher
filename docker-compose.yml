@@ -1,0 +1,7 @@
+version: '3'
+
+services:
+  filtergrapher:
+    build: .
+    volumes:
+      - "./:/build"
