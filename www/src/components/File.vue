@@ -53,28 +53,20 @@
         <div v-if="file">Selected file: {{ file ? `${file.name}: ${file.size} bytes` : '' }}</div>
         <div v-else>URL: {{ url ? `${url} (${size} bytes)` : '' }}</div>
 
-        <b-tabs class="mt-4" v-model="tabIndex">
-          <b-tab title="Overview" class="mt-2">
-            <div v-if="data">
-              <Overview :info="data" />
-            </div>
-          </b-tab>
-          <b-tab title="Frames" class="mt-2" lazy>
-            <Frames :file="file" />
-          </b-tab>
-        </b-tabs>
+        <div v-if="data">
+          <Overview :info="data" />
+        </div>
       </div>
     </div>
 </template>
 
 <script>
 import Overview from './Overview.vue';
-import Frames from './Frames.vue';
+
 export default {
   name: 'File',
   components: {
     Overview,
-    Frames,
   },
   data() {
     return {

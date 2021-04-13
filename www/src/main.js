@@ -5,7 +5,7 @@ import App from './App.vue'
 import 'bootstrap/dist/css/bootstrap.css';
 import 'bootstrap-vue/dist/bootstrap-vue.css';
 
-const worker = new Worker('filtergrapher-worker.js');
+const worker = new Worker('worker.js');
 Vue.prototype.$worker = worker;
 
 Vue.use(BootstrapVue);

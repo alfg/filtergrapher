@@ -10,8 +10,6 @@
       </div>
     </b-navbar>
 
-    <GitHubCorner />
-
     <div id="app" class="container">
       <b-alert variant="warning" size="sm" show>
         Please use Google Chrome or Microsoft Edge.
@@ -57,7 +55,6 @@ export default {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-align: center;
   color: #2c3e50;
   margin-top: 60px;
 }

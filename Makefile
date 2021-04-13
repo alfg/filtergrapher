@@ -9,5 +9,5 @@ dist/filtergrapher.wasm.js:
 	-lavcodec -lavformat -lavfilter -lavdevice -lswresample -lswscale -lavutil -lm -lx264 \
 	-pthread \
 	-lworkerfs.js \
-	-o dist/filtergrapher.wasm.js \
+	-o dist/filtergrapher.js \
 	src/filtergrapher-wrapper.cpp
