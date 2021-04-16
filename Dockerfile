@@ -34,6 +34,7 @@ ARG CFLAGS="-s USE_PTHREADS=1 -O3 -I${PREFIX}/include"
 ARG LDFLAGS="$CFLAGS -L${PREFIX}/lib -s INITIAL_MEMORY=33554432"
 
 # Compile ffmpeg.
+# https://github.com/FFmpeg/FFmpeg/blob/master/configure
 RUN cd /tmp/ffmpeg-${FFMPEG_VERSION} && \
   emconfigure ./configure \
   --prefix=${PREFIX} \
@@ -55,6 +56,7 @@ RUN cd /tmp/ffmpeg-${FFMPEG_VERSION} && \
   --enable-swresample \
   --enable-postproc \
   --enable-swscale \
+  --enable-filters \
   --enable-protocol=file \
   --enable-decoder=h264,aac,pcm_s16le \
   --enable-demuxer=mov,matroska \

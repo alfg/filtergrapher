@@ -30,10 +30,22 @@ onmessage = (e) => {
                 libavformat:  Module.avformat_version(),
             };
 
+            const stats = FS.stat('/frame-5.ppm');
+            console.log('STAT: ', stats);
+
+            // const stream = FS.open('/frame-1.ppm', 'r');
+            // const buf = new Uint8Array(stats.size);
+            // FS.read(stream, buf, 0, stats.size);
+            // FS.close(stream);
+
+            const f = FS.readFile('/frame-5.ppm');
+            // console.log(f);
+
             // Send back data response.
             data = {
                 ...info,
                 // streams: s,
+                file: f,
                 versions,
             }
             postMessage(data);

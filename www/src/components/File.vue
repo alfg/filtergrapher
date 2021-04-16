@@ -92,6 +92,7 @@ export default {
     onFile(event) {
       this.tabIndex = 0;
       this.$worker.onmessage = (e) => {
+        console.log('onmessage', e.data);
         this.data = e.data;
       }
       const file = event.dataTransfer ? event.dataTransfer.files[0] : event.target.files[0];
