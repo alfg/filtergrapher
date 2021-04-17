@@ -15,14 +15,7 @@ onmessage = (e) => {
             FS.mount(WORKERFS, { files: [file] }, '/work');
 
             // Call the wasm module.
-            const info = Module.get_file_info('/work/' + file.name);
-            console.log(info);
-
-            // Remap streams into collection.
-            // const s = [];
-            // for (let i = 0; i < info.streams.size(); i++) {
-            //     s.push(info.streams.get(i));
-            // }
+            const info = Module.run_filter('/work/' + file.name);
 
             const versions = {
                 libavutil:  Module.avutil_version(),
@@ -31,27 +24,19 @@ onmessage = (e) => {
             };
 
             const stats = FS.stat('/frame-5.ppm');
-            console.log('STAT: ', stats);
-
-            // const stream = FS.open('/frame-1.ppm', 'r');
-            // const buf = new Uint8Array(stats.size);
-            // FS.read(stream, buf, 0, stats.size);
-            // FS.close(stream);
-
             const f = FS.readFile('/frame-5.ppm');
-            // console.log(f);
 
             // Send back data response.
             data = {
                 ...info,
-                // streams: s,
                 file: f,
                 versions,
+                stats,
             }
             postMessage(data);
 
             // Cleanup mount.
-            // FS.unmount('/work');
+            FS.unmount('/work');
             break;
         
         default:

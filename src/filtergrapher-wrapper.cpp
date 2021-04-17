@@ -18,7 +18,7 @@ extern "C"
 #include <libavutil/opt.h>
 };
 
-const char *filter_descr = "eq=contrast=1.75";
+const char *filter_descr = "eq=contrast=1.75:brightness=0.20";
 
 static AVFormatContext *fmt_ctx;
 static AVCodecContext *dec_ctx;
@@ -42,7 +42,20 @@ const std::string c_avutil_version()
     return AV_STRINGIFY(LIBAVUTIL_VERSION);
 }
 
-static void save_ppm_frame(unsigned char *buf, int wrap, int xsize, int ysize, char *filename);
+static void save_ppm_frame(unsigned char *buf, int wrap, int xsize, int ysize, char *filename)
+{
+    FILE *f;
+    int i;
+    f = fopen(filename, "w");
+    // Writing the minimal required header for a ppm file format.
+    // https://en.wikipedia.org/wiki/Netpbm#PPM_example
+    fprintf(f, "P6\n%d %d\n%d\n", xsize, ysize, 255);
+
+    // Line by line.
+    for (i = 0; i < ysize; i++)
+        fwrite(buf + i * wrap, 1, xsize * 3, f);
+    fclose(f);
+}
 
 static int init_filters(const char *filters_descr)
 {
@@ -135,116 +148,76 @@ end:
     return ret;
 }
 
-typedef struct FileInfoResponse
+static int open_input_file(const char *filename)
 {
-    int frames;
-} FileInfoResponse;
-
-FileInfoResponse get_file_info(std::string filename)
-{
-    FILE *file = fopen(filename.c_str(), "rb");
-    if (!file)
-    {
-        printf("cannot open file\n");
-    }
-    fclose(file);
+    int ret;
+    AVCodec *dec;
 
     // Open the file and read header.
-    if (avformat_open_input(&fmt_ctx, filename.c_str(), NULL, NULL) != 0)
+    if ((ret = avformat_open_input(&fmt_ctx, filename, NULL, NULL)) != 0)
     {
         printf("ERROR: could not open the file\n");
+        av_log(NULL, AV_LOG_ERROR, "Cannot open input file\n");
+        return ret;
     }
 
-    printf("format %s, duration %lld us, bit_rate %lld\n", fmt_ctx->iformat->name, fmt_ctx->duration, fmt_ctx->bit_rate);
-    printf("finding stream info from format\n");
-
-    // Get the stream info so we can iterate the streams.
-    if (avformat_find_stream_info(fmt_ctx, NULL) < 0)
-    {
-        printf("ERROR could not get the stream info\n");
+    // Get the stream info to select the video stream.
+    if ((ret = avformat_find_stream_info(fmt_ctx, NULL)) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot find stream information\n");
+        return ret;
     }
 
-    AVCodec *pCodec = NULL;
-    AVCodecParameters *pCodecParameters = NULL;
-
-    // loop though all the streams and print its main information
-    for (int i = 0; i < fmt_ctx->nb_streams; i++)
-    {
-        AVCodecParameters *pLocalCodecParameters = NULL;
-        pLocalCodecParameters = fmt_ctx->streams[i]->codecpar;
-
-        printf("AVStream->time_base before open coded %d/%d \n", fmt_ctx->streams[i]->time_base.num, fmt_ctx->streams[i]->time_base.den);
-        printf("AVStream->r_frame_rate before open coded %d/%d \n", fmt_ctx->streams[i]->r_frame_rate.num, fmt_ctx->streams[i]->r_frame_rate.den);
-        printf("AVStream->start_time %" PRId64 "\n", fmt_ctx->streams[i]->start_time);
-        printf("AVStream->duration %" PRId64 "\n", fmt_ctx->streams[i]->duration);
-
-        AVCodec *pLocalCodec = NULL;
-
-        // finds the registered decoder for a codec ID.
-        pLocalCodec = avcodec_find_decoder(pLocalCodecParameters->codec_id);
-
-        if (pLocalCodec == NULL)
-        {
-            printf("ERROR unsupported codec!\n");
-        }
-
-        // When the stream is a video we store its index, codec parameters and codec.
-        if (pLocalCodecParameters->codec_type == AVMEDIA_TYPE_VIDEO)
-        {
-            if (video_stream_index == -1)
-            {
-                video_stream_index = i;
-                pCodec = pLocalCodec;
-                pCodecParameters = pLocalCodecParameters;
-            }
-
-            printf("Video Codec: resolution %d x %d\n", pLocalCodecParameters->width, pLocalCodecParameters->height);
-        }
-        else if (pLocalCodecParameters->codec_type == AVMEDIA_TYPE_AUDIO)
-        {
-            printf("Audio Codec: %d channels, sample rate %d\n", pLocalCodecParameters->channels, pLocalCodecParameters->sample_rate);
-        }
-
-        // Print its name, id and bitrate.
-        printf("\tCodec %s ID %d bit_rate %lld\n", pLocalCodec->name, pLocalCodec->id, pLocalCodecParameters->bit_rate);
+    ret = av_find_best_stream(fmt_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, &dec, 0);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot find a video stream in the input file\n");
+        return ret;
     }
+    video_stream_index = ret;
 
-    // Allocate for codec context.
-    dec_ctx = avcodec_alloc_context3(pCodec);
+    // Create the decoding context.
+    dec_ctx = avcodec_alloc_context3(dec);
     if (!dec_ctx)
+        return AVERROR(ENOMEM);
+    avcodec_parameters_to_context(dec_ctx, fmt_ctx->streams[video_stream_index]->codecpar);
+
+    // Init the video decoder.
+    if ((ret = avcodec_open2(dec_ctx, dec, NULL)) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot open video decoder\n");
+        return ret;
+    }
+    return 0;
+}
+
+typedef struct Response
+{
+    int frames;
+} Response;
+
+Response run_filter(std::string filename)
+{
+    Response r;
+
+    if (open_input_file(filename.c_str()) < 0)
     {
-        printf("failed to allocated memory for AVCodecContext\n");
+        return r;
     }
 
-    // Fill the codec context based on the values from the supplied codec parameters.
-    if (avcodec_parameters_to_context(dec_ctx, pCodecParameters) < 0)
-    {
-        printf("failed to copy codec params to codec context\n");
+    // Allocate for packets, frames, rgb frames and filtered frames.
+    AVPacket *packet;
+    AVFrame *frame;
+    AVFrame *frame_rgb;
+    AVFrame *filt_frame;
+
+    packet = av_packet_alloc();
+    frame = av_frame_alloc();
+    frame_rgb = av_frame_alloc();
+    filt_frame = av_frame_alloc();
+    if (!frame || !frame_rgb || !filt_frame) {
+      perror("Could not allocate frame");
+      return r;
     }
 
-    // Initialize the AVCodecContext to use the given AVCodec.
-    if (avcodec_open2(dec_ctx, pCodec, NULL) < 0)
-    {
-        printf("failed to open codec through avcodec_open2\n");
-    }
-
-    printf("allocate for frames\n");
-    // Allocate for frames.
-    AVFrame *pFrame = av_frame_alloc();
-    if (!pFrame)
-    {
-        printf("failed to allocated memory for AVFrame\n");
-    }
-
-    // Allocate for RGB frames.
-    AVFrame *pFrameRGB = av_frame_alloc();
-    if (!pFrameRGB)
-    {
-        printf("failed to allocated memory for AVFrame\n");
-    }
-
-    printf("get image buffer size\n");
-    // Get image buffer size.
+    // Get image buffer size for rgb.
     int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24,
                                             dec_ctx->width,
                                             dec_ctx->height,
@@ -254,16 +227,14 @@ FileInfoResponse get_file_info(std::string filename)
     uint8_t *buffer = NULL;
     buffer = static_cast<uint8_t *>(av_malloc(numBytes));
 
-    printf("fill arrays\n");
     // Fill the buffer with image data needed for swscale.
-    av_image_fill_arrays(pFrameRGB->data,
-                         pFrameRGB->linesize,
+    av_image_fill_arrays(frame_rgb->data,
+                         frame_rgb->linesize,
                          buffer,
                          AV_PIX_FMT_RGB24,
                          dec_ctx->width,
                          dec_ctx->height, 1);
 
-    printf("sws_getContext\n");
     // Create the swscale context for the images. We only need to set this once.
     struct SwsContext *sws_ctx = NULL;
     sws_ctx = sws_getContext(
@@ -276,61 +247,43 @@ FileInfoResponse get_file_info(std::string filename)
         SWS_BILINEAR,
         NULL, NULL, NULL);
 
-    // Allocate for compressed AVPacket.
-    AVPacket *pPacket = av_packet_alloc();
-    if (!pPacket)
-    {
-        printf("failed to allocated memory for AVPacket\n");
-    }
-
-    printf("init_filters\n");
-    // Initialize the filters.
-    //
-    // Allocate for filtered frames.
-    AVFrame *filt_frame = av_frame_alloc();
     int ret;
     if ((ret = init_filters(filter_descr)) < 0)
     {
         printf("ERROR: %s", av_err2str(ret));
+        return r;
     }
 
-    int response = 0;
     int how_many_packets_to_process = 8;
 
-    printf("read packets\n");
-
-    // Fill the Packet with data from the Stream.
-    while (av_read_frame(fmt_ctx, pPacket) >= 0)
+    // Read the packets.
+    while (av_read_frame(fmt_ctx, packet) >= 0)
     {
-
-        // If it's the video stream.
-        if (pPacket->stream_index == video_stream_index)
+        if (packet->stream_index == video_stream_index)
         {
-            printf("AVPacket->pts %" PRId64 "\n", pPacket->pts);
+            printf("AVPacket->pts %" PRId64 "\n", packet->pts);
 
             // Decode the packets to frames and apply sws_scale to populate FrameRGB data.
-            int response2 = 0;
-            response2 = avcodec_send_packet(dec_ctx, pPacket);
-            while (response2 >= 0)
+            int ret = 0;
+            ret = avcodec_send_packet(dec_ctx, packet);
+            while (ret >= 0)
             {
-                response2 = avcodec_receive_frame(dec_ctx, pFrame);
-                if (response2 == AVERROR(EAGAIN) || response2 == AVERROR_EOF)
+                ret = avcodec_receive_frame(dec_ctx, frame);
+                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
                 {
                     break;
                 }
-                else if (response2 < 0)
+                else if (ret < 0)
                 {
-                    printf("Error while receiving a frame from the decoder: %s\n", av_err2str(response));
+                    printf("Error while receiving a frame from the decoder: %s\n", av_err2str(ret));
                 }
 
-                sws_scale(sws_ctx, (uint8_t const *const *)pFrame->data,
-                          pFrame->linesize, 0, dec_ctx->height,
-                          pFrameRGB->data, pFrameRGB->linesize);
+                sws_scale(sws_ctx, (uint8_t const *const *)frame->data,
+                          frame->linesize, 0, dec_ctx->height,
+                          frame_rgb->data, frame_rgb->linesize);
 
-                // Apply the filter.
-                //
                 // Push the decoded frame into the filtergraph
-                if (av_buffersrc_add_frame_flags(buffersrc_ctx, pFrame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0)
+                if (av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0)
                 {
                     av_log(NULL, AV_LOG_ERROR, "Error while feeding the filtergraph\n");
                     break;
@@ -352,44 +305,24 @@ FileInfoResponse get_file_info(std::string filename)
                 save_ppm_frame(filt_frame->data[0], filt_frame->linesize[0], dec_ctx->width, dec_ctx->height, frame_filename);
             }
 
-            if (response < 0)
-                break;
-
             // Stop it, otherwise we'll be saving hundreds of frames.
             if (--how_many_packets_to_process <= 0)
                 break;
         }
-
-        av_packet_unref(pPacket);
+        av_packet_unref(packet);
     }
 
-    printf("releasing all the resources\n");
-    avformat_close_input(&fmt_ctx);
-    av_packet_free(&pPacket);
-    av_frame_free(&pFrame);
+    // Release all resources.
+    avfilter_graph_free(&filter_graph);
     avcodec_free_context(&dec_ctx);
+    avformat_close_input(&fmt_ctx);
+    av_packet_free(&packet);
+    av_frame_free(&frame);
+    av_frame_free(&frame_rgb);
+    av_frame_free(&filt_frame);
 
-    FileInfoResponse r = {
-        .frames = 10
-    };
+    r.frames = 10; // fake frames.
     return r;
-}
-
-static void save_ppm_frame(unsigned char *buf, int wrap, int xsize, int ysize, char *filename)
-{
-    printf("save_ppm_frame\n");
-
-    FILE *f;
-    int i;
-    f = fopen(filename, "w");
-    // Writing the minimal required header for a ppm file format.
-    // https://en.wikipedia.org/wiki/Netpbm#PPM_example
-    fprintf(f, "P6\n%d %d\n%d\n", xsize, ysize, 255);
-
-    // Line by line.
-    for (i = 0; i < ysize; i++)
-        fwrite(buf + i * wrap, 1, xsize * 3, f);
-    fclose(f);
 }
 
 EMSCRIPTEN_BINDINGS(constants)
@@ -401,7 +334,7 @@ EMSCRIPTEN_BINDINGS(constants)
 
 EMSCRIPTEN_BINDINGS(structs)
 {
-    emscripten::value_object<FileInfoResponse>("FileInfoResponse")
-        .field("frames", &FileInfoResponse::frames);
-    function("get_file_info", &get_file_info);
+    emscripten::value_object<Response>("Response")
+        .field("frames", &Response::frames);
+    function("run_filter", &run_filter);
 }

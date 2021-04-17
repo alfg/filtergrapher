@@ -53,20 +53,19 @@
         <div v-if="file">Selected file: {{ file ? `${file.name}: ${file.size} bytes` : '' }}</div>
         <div v-else>URL: {{ url ? `${url} (${size} bytes)` : '' }}</div>
 
-        <div v-if="data">
-          <Overview :info="data" />
-        </div>
+        frames: {{ data.frames }}
+
+        <img v-if="img" :src="img" width="100%" />
       </div>
     </div>
 </template>
 
 <script>
-import Overview from './Overview.vue';
+import Image from '../image';
 
 export default {
   name: 'File',
   components: {
-    Overview,
   },
   data() {
     return {
@@ -86,23 +85,23 @@ export default {
       tabIndex: 0,
       progress: 0,
       showProgress: false,
+      img: null,
     }
   },
   methods: {
     onFile(event) {
-      this.tabIndex = 0;
       this.$worker.onmessage = (e) => {
-        console.log('onmessage', e.data);
         this.data = e.data;
+        this.renderImage(e.data.file);
       }
       const file = event.dataTransfer ? event.dataTransfer.files[0] : event.target.files[0];
       this.$worker.postMessage([ 'get_file_info', file ]);
     },
     onDownload() {
       this.showProgress = true;
-      this.tabIndex = 0;
       this.$worker.onmessage = (e) => {
         this.data = e.data;
+        this.renderImage(e.data.file);
       }
       const xhr = new XMLHttpRequest();
       xhr.onprogress = (event) => {
@@ -120,6 +119,16 @@ export default {
       xhr.open('GET', this.url, true);
       xhr.responseType = 'blob';
       xhr.send();
+    },
+    renderImage(data) {
+      const blob = new Blob([data]);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const data = event.target.result;
+        const img = new Image(data);
+        this.img = img.getPNG();
+      }
+      reader.readAsBinaryString(blob);
     },
   }
 }
