@@ -47,8 +47,11 @@ Deploys to [Github Pages](https://pages.github.com/)
 npm run deploy
 ```
 
+View at: https://alfg.github.io/filtergrapher/
+
 ### Resources
 * https://ffmpeg.org/doxygen/4.1/index.html
+* https://ffmpeg.org/doxygen/4.1/filtering_video_8c-example.html
 * https://emscripten.org/
 * https://vuejs.org
 * https://bootstrap-vue.org
