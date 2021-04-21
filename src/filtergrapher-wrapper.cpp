@@ -17,7 +17,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 };
 
-const char *filter_descr = "eq=contrast=1.75:brightness=0.20";
+// const char *filter_descr = "eq=contrast=1.75:brightness=0.20";
 
 static AVFormatContext *fmt_ctx;
 static AVCodecContext *dec_ctx;
@@ -177,17 +177,34 @@ static int open_input_file(const char *filename) {
   return 0;
 }
 
+typedef struct Frame {
+  int frame_number;
+  std::string filename;
+} Frame;
+
 typedef struct Response {
-  int frames;
+  std::vector<Frame> frames;
+  int duration;
+  double time_base;
 } Response;
 
-Response run_filter(std::string filename, int timestamp) {
+
+Response run_filter(std::string filename, std::string filter, int timestamp) {
   av_log_set_level(AV_LOG_QUIET);
 
   Response r;
 
   if (open_input_file(filename.c_str()) < 0) {
     return r;
+  }
+
+  AVRational stream_time_base = fmt_ctx->streams[video_stream_index]->time_base;
+  r.duration = fmt_ctx->streams[video_stream_index]->duration;
+  r.time_base = av_q2d(stream_time_base);
+
+  // If the duration value isn't in the stream, get from the FormatContext.
+  if (r.duration == 0) {
+    r.duration = fmt_ctx->duration * r.time_base;
   }
 
   // Allocate for packets, frames, rgb frames and filtered frames.
@@ -224,12 +241,15 @@ Response run_filter(std::string filename, int timestamp) {
                            SWS_BILINEAR, NULL, NULL, NULL);
 
   int ret;
-  if ((ret = init_filters(filter_descr)) < 0) {
+  if ((ret = init_filters(filter.c_str())) < 0) {
     printf("ERROR: %s", av_err2str(ret));
     return r;
   }
 
   int how_many_packets_to_process = 8;
+  int max_packets_to_process = 30;
+  // int frame_count = 0;
+  int key_frames = 0;
 
   // Seek to frame from the given timestamp.
   av_seek_frame(fmt_ctx, video_stream_index, timestamp, AVSEEK_FLAG_ANY);
@@ -237,17 +257,23 @@ Response run_filter(std::string filename, int timestamp) {
   // Read the packets.
   while (av_read_frame(fmt_ctx, packet) >= 0) {
     if (packet->stream_index == video_stream_index) {
-      printf("AVPacket->pts %" PRId64 "\n", packet->pts);
+      // printf("AVPacket->pts %" PRId64 "\n", packet->pts);
 
       // Decode the packets to frames and apply sws_scale to populate FrameRGB
       // data.
       int ret = 0;
       ret = avcodec_send_packet(dec_ctx, packet);
-      while (ret >= 0) {
+      if (ret >= 0) {
         ret = avcodec_receive_frame(dec_ctx, frame);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
           continue;
         }
+
+        // Track keyframes so we paginate by each GOP.
+        if (frame->key_frame == 1) key_frames++;
+
+        // Break at the next keyframe found.
+        if (key_frames > 1) break;
 
         sws_scale(sws_ctx, (uint8_t const *const *)frame->data, frame->linesize,
                   0, dec_ctx->height, frame_rgb->data, frame_rgb->linesize);
@@ -260,11 +286,9 @@ Response run_filter(std::string filename, int timestamp) {
         }
 
         // Pull filtered frames from the filtergraph
-        while (1) {
-          ret = av_buffersink_get_frame(buffersink_ctx, filt_frame);
-          if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
-          if (ret < 0) av_frame_unref(filt_frame);
-        }
+        ret = av_buffersink_get_frame(buffersink_ctx, filt_frame);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+        if (ret < 0) av_frame_unref(filt_frame);
 
         // Save the filtered frame into PPM format (raw rgb).
         char frame_filename[1024];
@@ -272,10 +296,17 @@ Response run_filter(std::string filename, int timestamp) {
                  dec_ctx->frame_number);
         save_ppm_frame(filt_frame->data[0], filt_frame->linesize[0],
                        dec_ctx->width, dec_ctx->height, frame_filename);
+
+        Frame f = {
+          .frame_number = dec_ctx->frame_number,
+          .filename = frame_filename,
+        };
+        r.frames.push_back(f);
+        // frame_count++;
       }
 
       // Stop it, otherwise we'll be saving hundreds of frames.
-      if (--how_many_packets_to_process <= 0) break;
+      if (--max_packets_to_process <= 0) break;
     }
     av_packet_unref(packet);
   }
@@ -289,7 +320,6 @@ Response run_filter(std::string filename, int timestamp) {
   av_frame_free(&frame_rgb);
   av_frame_free(&filt_frame);
 
-  r.frames = 10;  // fake frames.
   return r;
 }
 
@@ -300,7 +330,14 @@ EMSCRIPTEN_BINDINGS(constants) {
 }
 
 EMSCRIPTEN_BINDINGS(structs) {
+  emscripten::value_object<Frame>("Frame")
+      .field("frame_number", &Frame::frame_number)
+      .field("filename", &Frame::filename);
+  register_vector<Frame>("Frame");
+
   emscripten::value_object<Response>("Response")
-      .field("frames", &Response::frames);
+      .field("frames", &Response::frames)
+      .field("duration", &Response::duration)
+      .field("time_base", &Response::time_base);
   function("run_filter", &run_filter);
 }

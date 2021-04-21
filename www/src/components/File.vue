@@ -2,7 +2,7 @@
     <div class="file">
       <b-form-row>
         <b-col>
-          <b-form-group label="Select a file:" label-for="file">
+          <b-form-group label="Select a file" label-for="file">
             <b-input-group>
               <b-form-select class="protocol" v-model="protocol">
                 <option v-for="o in protocols" :key="o.id" :value="o.value">{{ o.name }}</option>
@@ -50,10 +50,29 @@
       </b-progress>
 
       <div v-if="data">
-        <div v-if="file">Selected file: {{ file ? `${file.name}: ${file.size} bytes` : '' }}</div>
+        <div v-if="file">{{ file ? `${file.name}: ${file.size} bytes` : '' }}</div>
         <div v-else>URL: {{ url ? `${url} (${size} bytes)` : '' }}</div>
 
-        frames: {{ data.frames }}
+        <hr />
+        <b-form-group label="Filter" label-for="filter">
+          <b-input-group>
+            <b-form-input v-model="filter" placeholder="Input a filter"></b-form-input>
+            <b-input-group-append>
+              <b-button @click="onRender">Apply</b-button>
+            </b-input-group-append>
+          </b-input-group>
+        </b-form-group>
+
+        <b-form-group label="Frame" v-slot="{ ariaDescribedby }">
+          <b-form-radio-group
+            v-model="selected"
+            :options="frames"
+            :aria-describedby="ariaDescribedby"
+            name="plain-inline"
+            plain
+            @change="onFrameChange"
+          ></b-form-radio-group>
+        </b-form-group>
 
         <img v-if="img" :src="img" width="100%" />
       </div>
@@ -65,7 +84,18 @@ import Image from '../image';
 
 export default {
   name: 'File',
-  components: {
+  components: {},
+  computed: {
+    frames() {
+      const f = [];
+      for (let i = 0; i < this.data.frames.length; i++) {
+        f.push({
+          text: this.data.frames[i].frame_number,
+          value: this.data.frames[i].frame_number,
+        });
+      }
+      return f;
+    },
   },
   data() {
     return {
@@ -86,6 +116,8 @@ export default {
       progress: 0,
       showProgress: false,
       img: null,
+      filter: 'eq=contrast=1.75:brightness=0.20',
+      selected: 1,
     }
   },
   methods: {
@@ -94,8 +126,8 @@ export default {
         this.data = e.data;
         this.renderImage(e.data.file);
       }
-      const file = event.dataTransfer ? event.dataTransfer.files[0] : event.target.files[0];
-      this.$worker.postMessage([ 'get_file_info', file ]);
+      this.file = event.dataTransfer ? event.dataTransfer.files[0] : event.target.files[0];
+      this.$worker.postMessage([ 'run_filter', this.file, this.filter, 256000 ]); // bbb
     },
     onDownload() {
       this.showProgress = true;
@@ -113,7 +145,7 @@ export default {
         this.progress = 100;
         const file = new File([event.target.response], "file");
         this.size = file.size;
-        this.$worker.postMessage([ 'get_file_info', file ]);
+        this.$worker.postMessage([ 'run_filter', file, 0 ]);
         setTimeout(() => { this.showProgress = false; }, 2000);
       }
       xhr.open('GET', this.url, true);
@@ -129,6 +161,19 @@ export default {
         this.img = img.getPNG();
       }
       reader.readAsBinaryString(blob);
+    },
+    onRender() {
+      this.$worker.onmessage = (e) => {
+        this.data = e.data;
+        this.renderImage(e.data.file);
+      }
+      this.$worker.postMessage([ 'run_filter', this.file, this.filter, 256000 ]); // bbb
+    },
+    onFrameChange(frame) {
+      this.$worker.onmessage = (e) => {
+        this.renderImage(e.data);
+      }
+      this.$worker.postMessage([ 'load_frame', this.file, frame ]);
     },
   }
 }

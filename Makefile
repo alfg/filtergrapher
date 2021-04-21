@@ -9,6 +9,7 @@ dist/filtergrapher.wasm.js:
 	-s ASSERTIONS=1 \
 	-s STACK_OVERFLOW_CHECK=2 \
 	-s PTHREAD_POOL_SIZE_STRICT=2 \
+	-s ALLOW_MEMORY_GROWTH=1 \
 	-lavcodec -lavformat -lavfilter -lavdevice -lswresample -lpostproc -lswscale -lavutil -lm -lx264 \
 	-pthread \
 	-lworkerfs.js \

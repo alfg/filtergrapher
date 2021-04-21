@@ -3,19 +3,31 @@ onmessage = (e) => {
     const file = e.data[1];
 
     let data;
+    let f;
 
     switch (type) {
-        case 'get_file_info':
-            console.log('get_file_info');
+        case 'run_filter':
+            if (FS.analyzePath('/work').exists) {
+              FS.unmount('/work');
+            } else {
+              FS.mkdir('/work');
+            }
 
             // Mount FS for files.
-            if (!FS.analyzePath('/work').exists) {
-                FS.mkdir('/work');
-            }
             FS.mount(WORKERFS, { files: [file] }, '/work');
 
             // Call the wasm module.
-            const info = Module.run_filter('/work/' + file.name);
+            const filter = e.data[2];
+            const offset = e.data[3];
+            console.log(filter, offset, file);
+            const info = Module.run_filter('/work/' + file.name, filter, offset);
+
+            // Remap frames into collection.
+            const frames = [];
+            for (let i = 0; i < info.frames.size(); i++) {
+                frames.push(info.frames.get(i));
+            }
+            info.frames = frames;
 
             const versions = {
                 libavutil:  Module.avutil_version(),
@@ -23,8 +35,8 @@ onmessage = (e) => {
                 libavformat:  Module.avformat_version(),
             };
 
-            const stats = FS.stat('/frame-5.ppm');
-            const f = FS.readFile('/frame-5.ppm');
+            const stats = FS.stat('/frame-1.ppm');
+            f = FS.readFile('/frame-1.ppm');
 
             // Send back data response.
             data = {
@@ -34,10 +46,13 @@ onmessage = (e) => {
                 stats,
             }
             postMessage(data);
-
-            // Cleanup mount.
-            FS.unmount('/work');
             break;
+
+        case 'load_frame':
+          const frame = e.data[2];
+          f = FS.readFile(`/frame-${frame}.ppm`);
+          postMessage(f);
+          break;
         
         default:
             break;
