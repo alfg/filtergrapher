@@ -1,9 +1,13 @@
 # `Filtergrapher`
-A Web-based `libavfilter`. Powered by FFmpeg, Vue and Web Assembly!
+FFmpeg filtergraph editor in the browser. Powered by `libavfilter`, Vue and Web Assembly!
 
 https://alfg.github.io/filtergrapher/
 
-⚠️ ️Compatible with Chrome and Edge only due to limited support for [SharedArrayBuffer](https://caniuse.com/sharedarraybuffer) and the [required CORS headers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer) for Firefox on Github Pages.
+![screenshot](screenshot.jpg)
+
+⚠️ Experimental: Bugs and breaking changes are be expected.
+
+Please use Google Chrome or Microsoft Edge due to limited support for [SharedArrayBuffer](https://caniuse.com/sharedarraybuffer) and the [required CORS headers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer) for Firefox on Github Pages.
 
 ## Development
 `filtergrapher` uses [emscripten](https://emscripten.org/) to compile [FFmpeg](https://ffmpeg.org)'s [libav](https://ffmpeg.org/doxygen/4.1/index.html) to [Web Assembly](https://webassembly.org/) via [Docker](https://www.docker.com/).

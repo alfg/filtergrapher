@@ -63,6 +63,11 @@
           </b-input-group>
         </b-form-group>
 
+        <b-form-group label="Timestamp:" label-for="timestamp">
+          <b-input class="float-left col-2" v-model="timestamp" @change="onTimestampChange"></b-input>
+          <b-input id="timestamp" v-model="timestamp" type="range" min="0" :max="data.duration" @change="onTimestampChange"></b-input>
+        </b-form-group>
+
         <b-form-group label="Frame" v-slot="{ ariaDescribedby }">
           <b-form-radio-group
             v-model="selected"
@@ -105,7 +110,8 @@ export default {
         { name: 'Example', value: 'example'},
       ],
       examples: [
-        { name: 'Video Counter (10min, unfragmented, AVC Baseline)', value: 'https://video-examples-public.s3.us-west-2.amazonaws.com/video_counter_10min_unfragmented_avc.mp4' },
+        { name: 'Video Counter (10min, unfragmented, AVC Baseline, 3.38 MB)', value: 'https://video-examples-public.s3.us-west-2.amazonaws.com/video_counter_10min_unfragmented_avc.mp4' },
+        { name: 'Tears of Steel 360p (00:12:14, unfragmented, AVC Baseline, 67.85 MB)', value: 'https://video-examples-public.s3.us-west-2.amazonaws.com/tears-of-steel-360p.mp4' },
       ],
       protocol: 'file',
       file: null,
@@ -118,6 +124,7 @@ export default {
       img: null,
       filter: 'eq=contrast=1.75:brightness=0.20',
       selected: 1,
+      timestamp: 0,
     }
   },
   methods: {
@@ -127,7 +134,7 @@ export default {
         this.renderImage(e.data.file);
       }
       this.file = event.dataTransfer ? event.dataTransfer.files[0] : event.target.files[0];
-      this.$worker.postMessage([ 'run_filter', this.file, this.filter, 256000 ]); // bbb
+      this.$worker.postMessage([ 'run_filter', this.file, this.filter, parseInt(this.timestamp) ]);
     },
     onDownload() {
       this.showProgress = true;
@@ -143,9 +150,9 @@ export default {
       }
       xhr.onload = (event) => {
         this.progress = 100;
-        const file = new File([event.target.response], "file");
-        this.size = file.size;
-        this.$worker.postMessage([ 'run_filter', file, 0 ]);
+        this.file = new File([event.target.response], "file");
+        this.size = this.file.size;
+        this.$worker.postMessage([ 'run_filter', this.file, this.filter, 0 ]);
         setTimeout(() => { this.showProgress = false; }, 2000);
       }
       xhr.open('GET', this.url, true);
@@ -167,13 +174,20 @@ export default {
         this.data = e.data;
         this.renderImage(e.data.file);
       }
-      this.$worker.postMessage([ 'run_filter', this.file, this.filter, 256000 ]); // bbb
+      this.$worker.postMessage([ 'run_filter', this.file, this.filter, parseInt(this.timestamp) ]);
     },
     onFrameChange(frame) {
       this.$worker.onmessage = (e) => {
         this.renderImage(e.data);
       }
       this.$worker.postMessage([ 'load_frame', this.file, frame ]);
+    },
+    onTimestampChange(value) {
+      this.$worker.onmessage = (e) => {
+        this.data = e.data;
+        this.renderImage(e.data.file);
+      }
+      this.$worker.postMessage([ 'run_filter', this.file, this.filter, parseInt(value) ]);
     },
   }
 }

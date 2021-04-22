@@ -12,7 +12,7 @@
 
     <div id="app" class="container">
       <b-alert variant="warning" size="sm" show>
-        Please use Google Chrome or Microsoft Edge.
+        <span class="font-weight-bold">Experimental</span>: Please use Google Chrome or Microsoft Edge.
       </b-alert>
 
       <hr />

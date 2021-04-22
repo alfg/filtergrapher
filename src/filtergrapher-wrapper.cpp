@@ -38,6 +38,14 @@ const std::string c_avutil_version() {
   return AV_STRINGIFY(LIBAVUTIL_VERSION);
 }
 
+const std::string c_avfilter_version() {
+  return AV_STRINGIFY(LIBAVFILTER_VERSION);
+}
+
+const std::string c_swscale_version() {
+  return AV_STRINGIFY(LIBSWSCALE_VERSION);
+}
+
 static void save_ppm_frame(unsigned char *buf, int wrap, int xsize, int ysize,
                            char *filename) {
   FILE *f;
@@ -246,8 +254,7 @@ Response run_filter(std::string filename, std::string filter, int timestamp) {
     return r;
   }
 
-  int how_many_packets_to_process = 8;
-  int max_packets_to_process = 30;
+  int max_packets_to_process = 1000;
   // int frame_count = 0;
   int key_frames = 0;
 
@@ -326,7 +333,9 @@ Response run_filter(std::string filename, std::string filter, int timestamp) {
 EMSCRIPTEN_BINDINGS(constants) {
   function("avformat_version", &c_avformat_version);
   function("avcodec_version", &c_avcodec_version);
+  function("avfilter_version", &c_avfilter_version);
   function("avutil_version", &c_avutil_version);
+  function("swscale_version", &c_swscale_version);
 }
 
 EMSCRIPTEN_BINDINGS(structs) {
