@@ -5,6 +5,9 @@ https://alfg.github.io/filtergrapher/
 
 ![screenshot](screenshot.jpg)
 
+Try out some video filters from:
+https://ffmpeg.org/ffmpeg-filters.html#Video-Filters
+
 ⚠️ Experimental: Bugs and breaking changes are be expected.
 
 Please use Google Chrome or Microsoft Edge due to limited support for [SharedArrayBuffer](https://caniuse.com/sharedarraybuffer) and the [required CORS headers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer) for Firefox on Github Pages.
@@ -56,6 +59,7 @@ View at: https://alfg.github.io/filtergrapher/
 ### Resources
 * https://ffmpeg.org/doxygen/4.1/index.html
 * https://ffmpeg.org/doxygen/4.1/filtering_video_8c-example.html
+* https://ffmpeg.org/ffmpeg-filters.html#Video-Filters
 * https://emscripten.org/
 * https://vuejs.org
 * https://bootstrap-vue.org

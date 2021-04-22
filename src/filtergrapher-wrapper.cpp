@@ -7,17 +7,7 @@
 
 using namespace emscripten;
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavfilter/buffersink.h>
-#include <libavfilter/buffersrc.h>
-#include <libavformat/avformat.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/opt.h>
-#include <libswscale/swscale.h>
-};
-
-// const char *filter_descr = "eq=contrast=1.75:brightness=0.20";
+#include "filtergrapher-wrapper.h"
 
 static AVFormatContext *fmt_ctx;
 static AVCodecContext *dec_ctx;
@@ -25,26 +15,6 @@ AVFilterContext *buffersink_ctx;
 AVFilterContext *buffersrc_ctx;
 AVFilterGraph *filter_graph;
 static int video_stream_index = -1;
-
-const std::string c_avformat_version() {
-  return AV_STRINGIFY(LIBAVFORMAT_VERSION);
-}
-
-const std::string c_avcodec_version() {
-  return AV_STRINGIFY(LIBAVCODEC_VERSION);
-}
-
-const std::string c_avutil_version() {
-  return AV_STRINGIFY(LIBAVUTIL_VERSION);
-}
-
-const std::string c_avfilter_version() {
-  return AV_STRINGIFY(LIBAVFILTER_VERSION);
-}
-
-const std::string c_swscale_version() {
-  return AV_STRINGIFY(LIBSWSCALE_VERSION);
-}
 
 static void save_ppm_frame(unsigned char *buf, int wrap, int xsize, int ysize,
                            char *filename) {
@@ -185,18 +155,6 @@ static int open_input_file(const char *filename) {
   return 0;
 }
 
-typedef struct Frame {
-  int frame_number;
-  std::string filename;
-} Frame;
-
-typedef struct Response {
-  std::vector<Frame> frames;
-  int duration;
-  double time_base;
-} Response;
-
-
 Response run_filter(std::string filename, std::string filter, int timestamp) {
   av_log_set_level(AV_LOG_QUIET);
 
@@ -254,8 +212,8 @@ Response run_filter(std::string filename, std::string filter, int timestamp) {
     return r;
   }
 
-  int max_packets_to_process = 1000;
-  // int frame_count = 0;
+  int max_packets_to_process = 250;
+  int frame_count = 0;
   int key_frames = 0;
 
   // Seek to frame from the given timestamp.
@@ -309,14 +267,16 @@ Response run_filter(std::string filename, std::string filter, int timestamp) {
           .filename = frame_filename,
         };
         r.frames.push_back(f);
-        // frame_count++;
+        frame_count++;
       }
 
-      // Stop it, otherwise we'll be saving hundreds of frames.
+      // Stop if too many frames are processed.
       if (--max_packets_to_process <= 0) break;
     }
     av_packet_unref(packet);
   }
+
+  r.frame_count = frame_count;
 
   // Release all resources.
   avfilter_graph_free(&filter_graph);
@@ -346,6 +306,7 @@ EMSCRIPTEN_BINDINGS(structs) {
 
   emscripten::value_object<Response>("Response")
       .field("frames", &Response::frames)
+      .field("frame_count", &Response::frame_count)
       .field("duration", &Response::duration)
       .field("time_base", &Response::time_base);
   function("run_filter", &run_filter);
