@@ -2,8 +2,7 @@ onmessage = e => {
   const type = e.data[0];
   const file = e.data[1];
 
-  let data;
-  let f;
+  let data, f;
 
   switch (type) {
     case "run_filter":
@@ -31,16 +30,20 @@ onmessage = e => {
       const versions = {
         libavutil: Module.avutil_version(),
         libavcodec: Module.avcodec_version(),
-        libavformat: Module.avformat_version()
+        libavformat: Module.avformat_version(),
+        libavfilter: Module.avfilter_version(),
       };
 
+      // Get first frame.
       const stats = FS.stat("/frame-1.ppm");
       f = FS.readFile("/frame-1.ppm");
+      f2 = FS.readFile("/frame-1-filt.ppm");
 
       // Send back data response.
       data = {
         ...info,
-        file: f,
+        original: f,
+        filtered: f2,
         versions,
         stats
       };
@@ -50,7 +53,8 @@ onmessage = e => {
     case "load_frame":
       const frame = e.data[2];
       f = FS.readFile(`/frame-${frame}.ppm`);
-      postMessage(f);
+      f2 = FS.readFile(`/frame-${frame}-filt.ppm`);
+      postMessage({ original: f, filtered: f2 });
       break;
 
     default:
