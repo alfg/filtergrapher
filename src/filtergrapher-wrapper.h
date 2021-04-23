@@ -31,6 +31,7 @@ const std::string c_swscale_version() {
 typedef struct Frame {
   int frame_number;
   std::string filename;
+  std::string filename_filtered;
 } Frame;
 
 typedef struct Response {
@@ -38,4 +39,6 @@ typedef struct Response {
   int frame_count;
   int duration;
   double time_base;
+  bool error;
+  std::string error_message;
 } Response;

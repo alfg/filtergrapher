@@ -56,16 +56,23 @@
         <hr />
         <b-form-group label="Filter" label-for="filter">
           <b-input-group>
-            <b-form-input v-model="filter" placeholder="Input a filter"></b-form-input>
+            <b-input-group-prepend is-text>
+              <b-form-checkbox v-model="filterEnabled" name="check-button" switch class="mr-n2"></b-form-checkbox>
+            </b-input-group-prepend>
+            <b-form-input v-model="filter" placeholder="Input a filter" :state="!data.error" aria-describedby="input-filter-feedback"></b-form-input>
             <b-input-group-append>
               <b-button @click="onRender">Apply</b-button>
             </b-input-group-append>
+            <b-form-invalid-feedback id="input-filter-feedback">
+              {{ data.error_message }}
+            </b-form-invalid-feedback>
           </b-input-group>
         </b-form-group>
 
         <b-form-group label="Timestamp:" label-for="timestamp">
           <b-input class="float-left col-2" v-model="timestamp" @change="onTimestampChange"></b-input>
           <b-input id="timestamp" v-model="timestamp" type="range" min="0" :max="data.duration" @change="onTimestampChange"></b-input>
+          <div v-if="isLoading" class="text-center"><b-spinner small label="Spinning"></b-spinner> Loading...</div>
         </b-form-group>
 
         <b-form-group label="Frame" v-slot="{ ariaDescribedby }">
@@ -79,7 +86,7 @@
           ></b-form-radio-group>
         </b-form-group>
 
-        <img v-if="img" :src="img" width="100%" />
+        <img v-if="img" :src="filterEnabled ? imgFiltered : img" width="100%" />
       </div>
     </div>
 </template>
@@ -122,25 +129,36 @@ export default {
       progress: 0,
       showProgress: false,
       img: null,
+      imgFiltered: null,
       filter: 'eq=contrast=1.75:brightness=0.20',
       selected: 1,
       timestamp: 0,
+      filterEnabled: true,
+      isLoading: false,
     }
   },
   methods: {
     onFile(event) {
+      this.isLoading = true;
+      this.timestamp = 0;
       this.$worker.onmessage = (e) => {
         this.data = e.data;
-        this.renderImage(e.data.file);
+        this.renderImage(e.data.original, (img) => this.img = img);
+        this.renderImage(e.data.filtered, (img) => this.imgFiltered = img);
+        this.isLoading = false;
       }
       this.file = event.dataTransfer ? event.dataTransfer.files[0] : event.target.files[0];
       this.$worker.postMessage([ 'run_filter', this.file, this.filter, parseInt(this.timestamp) ]);
     },
     onDownload() {
+      this.isLoading = true;
+      this.timestamp = 0;
       this.showProgress = true;
       this.$worker.onmessage = (e) => {
         this.data = e.data;
-        this.renderImage(e.data.file);
+        this.renderImage(e.data.original, (img) => this.img = img);
+        this.renderImage(e.data.filtered, (img) => this.imgFiltered = img);
+        this.isLoading = false;
       }
       const xhr = new XMLHttpRequest();
       xhr.onprogress = (event) => {
@@ -159,35 +177,43 @@ export default {
       xhr.responseType = 'blob';
       xhr.send();
     },
-    renderImage(data) {
+    renderImage(data, callback) {
       const blob = new Blob([data]);
       const reader = new FileReader();
       reader.onload = (event) => {
         const data = event.target.result;
         const img = new Image(data);
-        this.img = img.getPNG();
+        const png = img.getPNG();
+        return callback(png);
       }
       reader.readAsBinaryString(blob);
     },
     onRender() {
+      this.isLoading = true;
       this.$worker.onmessage = (e) => {
         this.data = e.data;
-        this.renderImage(e.data.file);
+        this.renderImage(e.data.original, (img) => this.img = img);
+        this.renderImage(e.data.filtered, (img) => this.imgFiltered = img);
+        this.isLoading = false;
       }
-      this.$worker.postMessage([ 'run_filter', this.file, this.filter, parseInt(this.timestamp) ]);
+      this.$worker.postMessage([ 'run_filter', this.file, this.filter || 'null', parseInt(this.timestamp) ]);
     },
     onFrameChange(frame) {
       this.$worker.onmessage = (e) => {
-        this.renderImage(e.data);
+        this.renderImage(e.data.original, (img) => this.img = img);
+        this.renderImage(e.data.filtered, (img) => this.imgFiltered = img);
       }
       this.$worker.postMessage([ 'load_frame', this.file, frame ]);
     },
     onTimestampChange(value) {
+      this.isLoading = true;
       this.$worker.onmessage = (e) => {
         this.data = e.data;
-        this.renderImage(e.data.file);
+        this.renderImage(e.data.original, (img) => this.img = img);
+        this.renderImage(e.data.filtered, (img) => this.imgFiltered = img);
+        this.isLoading = false;
       }
-      this.$worker.postMessage([ 'run_filter', this.file, this.filter, parseInt(value) ]);
+      this.$worker.postMessage([ 'run_filter', this.file, this.filter || 'null', parseInt(value) ]);
     },
   }
 }

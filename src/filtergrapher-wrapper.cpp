@@ -159,6 +159,7 @@ Response run_filter(std::string filename, std::string filter, int timestamp) {
   av_log_set_level(AV_LOG_QUIET);
 
   Response r;
+  r.error = false;
 
   if (open_input_file(filename.c_str()) < 0) {
     return r;
@@ -209,6 +210,8 @@ Response run_filter(std::string filename, std::string filter, int timestamp) {
   int ret;
   if ((ret = init_filters(filter.c_str())) < 0) {
     printf("ERROR: %s", av_err2str(ret));
+    r.error = true;
+    r.error_message = av_err2str(ret);
     return r;
   }
 
@@ -255,16 +258,23 @@ Response run_filter(std::string filename, std::string filter, int timestamp) {
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
         if (ret < 0) av_frame_unref(filt_frame);
 
-        // Save the filtered frame into PPM format (raw rgb).
         char frame_filename[1024];
-        snprintf(frame_filename, sizeof(frame_filename), "%s-%d.ppm", "frame",
-                 dec_ctx->frame_number);
-        save_ppm_frame(filt_frame->data[0], filt_frame->linesize[0],
+        char frame_filename_filt[1024];
+        snprintf(frame_filename, sizeof(frame_filename), "%s-%d.ppm", "frame", dec_ctx->frame_number);
+        snprintf(frame_filename_filt, sizeof(frame_filename_filt), "%s-%d-filt.ppm", "frame", dec_ctx->frame_number);
+
+        // Save original frame into PPM format (raw rgb).
+        save_ppm_frame(frame_rgb->data[0], frame_rgb->linesize[0],
                        dec_ctx->width, dec_ctx->height, frame_filename);
+
+        // Save the filtered frame into PPM format (raw rgb).
+        save_ppm_frame(filt_frame->data[0], filt_frame->linesize[0],
+                       dec_ctx->width, dec_ctx->height, frame_filename_filt);
 
         Frame f = {
           .frame_number = dec_ctx->frame_number,
           .filename = frame_filename,
+          .filename_filtered = frame_filename_filt,
         };
         r.frames.push_back(f);
         frame_count++;
@@ -301,13 +311,16 @@ EMSCRIPTEN_BINDINGS(constants) {
 EMSCRIPTEN_BINDINGS(structs) {
   emscripten::value_object<Frame>("Frame")
       .field("frame_number", &Frame::frame_number)
-      .field("filename", &Frame::filename);
+      .field("filename", &Frame::filename)
+      .field("filename_filtered", &Frame::filename_filtered);
   register_vector<Frame>("Frame");
 
   emscripten::value_object<Response>("Response")
       .field("frames", &Response::frames)
       .field("frame_count", &Response::frame_count)
       .field("duration", &Response::duration)
-      .field("time_base", &Response::time_base);
+      .field("time_base", &Response::time_base)
+      .field("error", &Response::error)
+      .field("error_message", &Response::error_message);
   function("run_filter", &run_filter);
 }
