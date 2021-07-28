@@ -5,9 +5,6 @@ module.exports = {
       title: 'Filtergrapher',
     }
   },
-  publicPath: process.env.NODE_ENV === 'production'
-    ? '/filtergrapher/'
-    : '/',
   configureWebpack: {
     devServer: {
       headers: {
