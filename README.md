@@ -8,7 +8,7 @@ https://filtergrapher.netlify.app/
 Try out some video filters from:
 https://ffmpeg.org/ffmpeg-filters.html#Video-Filters
 
-⚠️ Experimental: Bugs and breaking changes are be expected.
+⚠️ Experimental: Bugs and breaking changes are to be expected.
 
 ## Development
 `filtergrapher` uses [emscripten](https://emscripten.org/) to compile [FFmpeg](https://ffmpeg.org)'s [libav](https://ffmpeg.org/doxygen/4.1/index.html) to [Web Assembly](https://webassembly.org/) via [Docker](https://www.docker.com/).
